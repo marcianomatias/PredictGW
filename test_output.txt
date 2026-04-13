@@ -1,0 +1,10 @@
+Starting tests...
+PASS: import base_device
+PASS: TagLimit
+PASS: DataBuffer circular (10 records)
+PASS: Inverter sim (C=0.058)
+PASS: RBridge init (python fallback)
+PASS: Anomaly detection (5 anomalies, method=isolation_forest_sklearn)
+PASS: HealthScoreManager
+
+ALL TESTS PASSED!

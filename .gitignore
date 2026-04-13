@@ -1,0 +1,23 @@
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Streamlit
+streamlit.log
+
+# Project specific / IDE
+.idea/
+.vscode/
+*.swp
+
+# Reports
+*.pdf
+*.csv

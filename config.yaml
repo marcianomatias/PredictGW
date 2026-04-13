@@ -1,0 +1,249 @@
+# ============================================================
+# PredictGW — Configuração de Dispositivos Industriais
+# ============================================================
+# Para adicionar um novo dispositivo, basta copiar um bloco
+# de device e alterar os parâmetros. O sistema instancia
+# automaticamente (Plug & Play).
+# ============================================================
+
+system:
+  name: "PredictGW Industrial Gateway"
+  version: "1.0.0"
+  simulation_mode: true          # true = dados simulados, false = hardware real
+  buffer_size: 500               # Últimos N registros em memória por dispositivo
+  poll_interval_ms: 200          # Intervalo global de polling (ms)
+  analytics_interval_s: 5        # Intervalo de execução do motor preditivo (s)
+  r_engine: "auto"               # "r" = forçar R, "python" = forçar Python, "auto" = tentar R, fallback Python
+
+# ============================================================
+# DISPOSITIVOS
+# ============================================================
+devices:
+
+  # ----------------------------------------------------------
+  # INVERSOR WEG CFW-500 (via ESP32 HTTP/JSON)
+  # ----------------------------------------------------------
+  - id: "inv_motor_principal"
+    name: "Inversor Motor Principal"
+    type: "inverter"
+    protocol: "json_http"
+    connection:
+      host: "192.168.1.50"
+      port: 80
+      endpoint: "/api/telemetry"
+      timeout_s: 5
+      retries: 3
+    poll_interval_ms: 100
+    tags:
+      - name: "Corrente"
+        unit: "A"
+        key: "current"             # Chave no JSON de resposta
+        limits:
+          warning_low: 0.5
+          warning_high: 1.8
+          critical_low: 0.2
+          critical_high: 2.5
+          hysteresis: 0.05
+      - name: "Frequência"
+        unit: "Hz"
+        key: "frequency"
+        limits:
+          warning_low: 45.0
+          warning_high: 62.0
+          critical_low: 40.0
+          critical_high: 65.0
+          hysteresis: 0.5
+      - name: "Temperatura"
+        unit: "°C"
+        key: "temperature"
+        limits:
+          warning_low: 10.0
+          warning_high: 65.0
+          critical_low: 5.0
+          critical_high: 80.0
+          hysteresis: 1.0
+      - name: "RPM"
+        unit: "rpm"
+        key: "rpm"
+        limits:
+          warning_low: 500
+          warning_high: 3400
+          critical_low: 200
+          critical_high: 3600
+          hysteresis: 50
+      - name: "Tensão DC Bus"
+        unit: "V"
+        key: "dc_bus_voltage"
+        limits:
+          warning_low: 280
+          warning_high: 420
+          critical_low: 250
+          critical_high: 450
+          hysteresis: 5
+    predictive:
+      target_tag: "Corrente"
+      critical_limit: 2.5
+      model: "prophet"             # "prophet" ou "arima"
+      anomaly_method: "isolation_forest"  # "isolation_forest" ou "stl"
+      lookback_window: 200
+
+  # ----------------------------------------------------------
+  # CLP BOMBA HIDRÁULICA (Schneider M221 via Modbus TCP)
+  # ----------------------------------------------------------
+  - id: "clp_bomba_hidraulica"
+    name: "CLP Bomba Hidráulica"
+    type: "plc"
+    protocol: "modbus_tcp"
+    connection:
+      host: "192.168.1.100"
+      port: 502
+      unit_id: 1
+      timeout_s: 3
+      retries: 2
+    poll_interval_ms: 150
+    tags:
+      # --- Entradas Digitais (Coils / Discrete Inputs) ---
+      - name: "Sensor Nível Alto"
+        type: "digital_input"
+        register_type: "discrete_input"
+        address: 0
+      - name: "Sensor Nível Baixo"
+        type: "digital_input"
+        register_type: "discrete_input"
+        address: 1
+      - name: "Pressostato"
+        type: "digital_input"
+        register_type: "discrete_input"
+        address: 2
+      - name: "Emergência"
+        type: "digital_input"
+        register_type: "discrete_input"
+        address: 3
+      # --- Saídas Digitais (Coils) ---
+      - name: "Bomba Principal"
+        type: "digital_output"
+        register_type: "coil"
+        address: 0
+      - name: "Válvula Solenoide"
+        type: "digital_output"
+        register_type: "coil"
+        address: 1
+      - name: "Alarme Sonoro"
+        type: "digital_output"
+        register_type: "coil"
+        address: 2
+      # --- Sensores Analógicos (Holding/Input Registers) ---
+      - name: "Pressão Linha"
+        type: "analog"
+        unit: "bar"
+        register_type: "input_register"
+        address: 0
+        scale: 0.1
+        offset: 0
+        limits:
+          warning_low: 2.0
+          warning_high: 8.0
+          critical_low: 1.0
+          critical_high: 10.0
+          hysteresis: 0.2
+      - name: "Temperatura Óleo"
+        type: "analog"
+        unit: "°C"
+        register_type: "input_register"
+        address: 1
+        scale: 0.1
+        offset: 0
+        limits:
+          warning_low: 20.0
+          warning_high: 70.0
+          critical_low: 10.0
+          critical_high: 85.0
+          hysteresis: 1.0
+      - name: "Vazão"
+        type: "analog"
+        unit: "L/min"
+        register_type: "input_register"
+        address: 2
+        scale: 0.01
+        offset: 0
+        limits:
+          warning_low: 5.0
+          warning_high: 50.0
+          critical_low: 2.0
+          critical_high: 60.0
+          hysteresis: 0.5
+    predictive:
+      target_tag: "Pressão Linha"
+      critical_limit: 10.0
+      model: "arima"
+      anomaly_method: "stl"
+      lookback_window: 150
+
+  # ----------------------------------------------------------
+  # EXEMPLO PLUG & PLAY: CLP ESTEIRA TRANSPORTADORA
+  # Para adicionar, basta descomentar o bloco abaixo.
+  # O sistema detectará automaticamente na próxima execução.
+  # ----------------------------------------------------------
+  - id: "clp_esteira_01"
+    name: "CLP Esteira Transportadora"
+    type: "plc"
+    protocol: "modbus_tcp"
+    connection:
+      host: "192.168.1.101"
+      port: 502
+      unit_id: 2
+      timeout_s: 3
+      retries: 2
+    poll_interval_ms: 200
+    tags:
+      - name: "Motor Esteira"
+        type: "digital_output"
+        register_type: "coil"
+        address: 0
+      - name: "Sensor Presença Entrada"
+        type: "digital_input"
+        register_type: "discrete_input"
+        address: 0
+      - name: "Sensor Presença Saída"
+        type: "digital_input"
+        register_type: "discrete_input"
+        address: 1
+      - name: "Velocidade Esteira"
+        type: "analog"
+        unit: "m/min"
+        register_type: "input_register"
+        address: 0
+        scale: 0.01
+        offset: 0
+        limits:
+          warning_low: 5.0
+          warning_high: 25.0
+          critical_low: 2.0
+          critical_high: 30.0
+          hysteresis: 0.5
+      - name: "Corrente Motor Esteira"
+        type: "analog"
+        unit: "A"
+        register_type: "input_register"
+        address: 1
+        scale: 0.01
+        offset: 0
+        limits:
+          warning_low: 0.5
+          warning_high: 3.0
+          critical_low: 0.2
+          critical_high: 4.0
+          hysteresis: 0.05
+      - name: "Contador Peças"
+        type: "analog"
+        unit: "un"
+        register_type: "holding_register"
+        address: 10
+        scale: 1
+        offset: 0
+    predictive:
+      target_tag: "Corrente Motor Esteira"
+      critical_limit: 4.0
+      model: "prophet"
+      anomaly_method: "isolation_forest"
+      lookback_window: 200
